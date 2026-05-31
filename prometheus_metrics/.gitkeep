@@ -1,0 +1,2 @@
+# Каталог для PROMETHEUS_MULTIPROC_DIR (prometheus_client multiprocess) контейнера litellm.
+# Бинд-маунтится в /app/prometheus_metrics. Файл нужен, чтобы каталог существовал в репозитории.

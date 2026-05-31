@@ -1,0 +1,353 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["litellm", "continue", "tokens"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "LiteLLM + Continue — tokens/sec (cancel-inclusive)",
+  "uid": "tokens-per-sec",
+  "version": 2,
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "О дашборде",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "**tokens/sec включая отменённые.** `continue_generated_tokens_total` (Continue) считает токены даже для отменённых генераций — это и есть cancel-inclusive throughput. Серверные `litellm_*` при обрыве стрима недосчитывают, поэтому ряды показаны раздельно (НЕ суммируются — это один и тот же трафик через прокси). **Отдельной «cancel tokens/sec» нет**: dev-data Continue не помечает токены отменой. Раздел *Автодополнение* показывает прокси отмен (`accepted=false`) и долю попаданий в кэш (`cache_hit`) — именно кэш/прогрев объясняют, почему повторная отмена даёт «Complete»."
+      }
+    },
+
+    {
+      "id": 2,
+      "type": "row",
+      "title": "Пропускная способность (tokens/sec)",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 4 },
+      "panels": []
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Generated tokens/sec (cancel-inclusive)",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "tok/s", "decimals": 1 }, "overrides": [] },
+      "options": {
+        "colorMode": "value", "graphMode": "area", "justifyMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(continue_generated_tokens_total[1m]))", "legendFormat": "tok/s" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Prompt tokens/sec",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "tok/s", "decimals": 1 }, "overrides": [] },
+      "options": {
+        "colorMode": "value", "graphMode": "area", "justifyMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(continue_prompt_tokens_total[1m]))", "legendFormat": "tok/s" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Continue events/sec",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops", "decimals": 2 }, "overrides": [] },
+      "options": {
+        "colorMode": "value", "graphMode": "area", "justifyMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(continue_events_total[1m]))", "legendFormat": "events/s" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Всего сгенерировано токенов",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": {
+        "colorMode": "value", "graphMode": "none", "justifyMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(continue_generated_tokens_total)", "legendFormat": "tokens" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Output tokens/sec — Continue (cancel-inclusive) vs LiteLLM (server-side)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 11 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "tok/s", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(continue_generated_tokens_total[5m]))", "legendFormat": "Continue generated (cancel-inclusive)" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(litellm_output_tokens_metric_total[5m]))", "legendFormat": "LiteLLM output" }
+      ]
+    },
+
+    {
+      "id": 8,
+      "type": "row",
+      "title": "По моделям и LiteLLM",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 19 },
+      "panels": []
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Generated tokens/sec по моделям (Continue)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "tok/s", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (model) (rate(continue_generated_tokens_total[5m]))", "legendFormat": "{{model}}" }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "LiteLLM input vs output tokens/sec",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "tok/s", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": [] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "litellm_input_tokens_per_sec_5m", "legendFormat": "input" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "litellm_output_tokens_per_sec_5m", "legendFormat": "output" }
+      ]
+    },
+
+    {
+      "id": 11,
+      "type": "row",
+      "title": "Автодополнение и отмены (Esc)",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 28 },
+      "panels": []
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Autocomplete events/sec — accepted vs rejected",
+      "gridPos": { "h": 8, "w": 10, "x": 0, "y": 29 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": [] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(continue_autocomplete_total{accepted=\"true\"}[5m]))", "legendFormat": "accepted" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(continue_autocomplete_total{accepted=\"false\"}[5m]))", "legendFormat": "rejected" }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Reject rate (прокси отмен, 5m)",
+      "gridPos": { "h": 8, "w": 4, "x": 10, "y": 29 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit", "min": 0, "max": 1,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "red", "value": 0.8 } ] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value", "graphMode": "area", "justifyMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "continue_autocomplete_reject_rate_5m", "legendFormat": "reject" }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Cache-hit rate (почему «Complete», 5m)",
+      "gridPos": { "h": 8, "w": 4, "x": 14, "y": 29 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit", "min": 0, "max": 1,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "blue", "value": null } ] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value", "graphMode": "area", "justifyMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "continue_autocomplete_cache_hit_rate_5m", "legendFormat": "cache hit" }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Autocomplete cache hit vs miss (events/sec)",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 29 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": [] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(continue_autocomplete_total{cache_hit=\"true\"}[5m]))", "legendFormat": "cache hit" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(continue_autocomplete_total{cache_hit=\"false\"}[5m]))", "legendFormat": "cache miss" }
+      ]
+    },
+
+    {
+      "id": 16,
+      "type": "row",
+      "title": "Здоровье пайплайна",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 37 },
+      "panels": []
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Ingest errors/sec по причине",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 38 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "sum"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (reason) (rate(continue_ingest_errors_total[5m]))", "legendFormat": "{{reason}}" }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Секунд с последнего события Continue",
+      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 38 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 120 }, { "color": "red", "value": 600 } ] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value", "graphMode": "none", "justifyMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "time() - max(continue_last_event_timestamp_seconds)", "legendFormat": "age" }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "stat",
+      "title": "Ingest errors (всего)",
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 38 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value", "graphMode": "none", "justifyMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(continue_ingest_errors_total)", "legendFormat": "errors" }
+      ]
+    }
+  ]
+}

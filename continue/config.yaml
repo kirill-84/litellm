@@ -1,0 +1,40 @@
+name: Local Config
+version: 1.0.0
+schema: v1
+
+models:
+  - name: Qwen2.5
+    provider: openai
+    model: qwen2.5-coder-3b-instruct-q8_0:latest
+    apiBase: http://10.0.3.132:4000
+    # apiKey ДОЛЖЕН совпадать с LITELLM_MASTER_KEY прокси из .env (иначе 401).
+    apiKey: sk-super-secret-master-key
+    roles:
+      - autocomplete
+    autocompleteOptions:
+      debounceDelay: 350
+      maxPromptTokens: 1024
+      onlyMyCode: true
+    defaultCompletionOptions:
+      temperature: 0.3
+      stop:
+        - "\n"
+    requestOptions:
+      extraBodyProperties:
+        think: false
+
+rules:
+  - Give concise responses
+
+data:
+  - name: Continue Telemetry Exporter
+    destination: http://10.0.3.132:4010/ingest
+    schema: 0.2.0
+    # noCode: метрики токенов и accepted сохраняются, исходный код в журнал не пишется.
+    level: noCode
+    events:
+      - autocomplete
+      - chatInteraction
+      - editOutcome
+      - tokensGenerated
+      - toolUsage

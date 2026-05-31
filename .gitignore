@@ -1,0 +1,9 @@
+/.idea
+/.claude
+.playwright-mcp
+
+# misc
+.DS_Store
+
+# CLAUDE
+CLAUDE.md

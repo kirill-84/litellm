@@ -1,0 +1,26 @@
+model_list:
+  - model_name: qwen2.5-coder-3b-instruct-q8_0:latest
+    litellm_params:
+      model: ollama/qwen2.5-coder-3b-instruct-q8_0:latest
+      # Замените remote_ip на адрес/IP машины с Ollama, напр. http://10.0.3.132:11434
+      api_base: http://remote_ip:11434
+      temperature: 0.2
+      top_p: 0.9
+      max_tokens: 768
+      stop:
+        - "<|im_end|>"
+        - "<|endoftext|>"
+      num_predict: 768
+      repeat_penalty: 1.15
+
+# ВАЖНО: litellm_settings — ключ ВЕРХНЕГО уровня (НЕ внутри элемента model_list),
+# иначе callback prometheus не загрузится и метрик litellm_* на /metrics не будет.
+litellm_settings:
+  callbacks:
+    - prometheus
+
+general_settings:
+  # master_key должен начинаться с sk-; значение берётся из .env (LITELLM_MASTER_KEY).
+  master_key: os.environ/LITELLM_MASTER_KEY
+  # database_url здесь НЕ задаём: единственный источник — env DATABASE_URL из
+  # docker-compose, чтобы креды proxy и сервиса db гарантированно совпадали.
