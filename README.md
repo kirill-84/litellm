@@ -73,10 +73,14 @@ sum(rate(litellm_output_tokens_metric_total[1m]))
 
 # прокси-доля отклонений автодополнения (НЕ доля отмен на лету)
 continue_autocomplete_reject_rate_5m
+
+# отклонённые автодополнения в секунду, отрисованные «в минус» (индикатор отказов;
+# это ЗАПРОСЫ/сек, НЕ tokens/s — токенно-взвешенной отмены в dev-data нет)
+0 - sum(rate(continue_autocomplete_total{accepted="false"}[5m]))
 ```
 
 Готовые recording-правила — в `prometheus/rules/continue_litellm.yml`
-(`*_per_sec_5m`, `continue_autocomplete_reject_rate_5m`).
+(`*_per_sec_5m`, `continue_autocomplete_reject_rate_5m`, `continue_autocomplete_cache_hit_rate_5m`).
 
 ## Удаление кастомных метрик (PromQL-селектор)
 
@@ -117,9 +121,20 @@ curl -X POST 'http://localhost:9090/api/v1/admin/tsdb/clean_tombstones'
 ## Grafana (:3000, admin/admin)
 
 Datasource Prometheus и дашборд **«LiteLLM + Continue — tokens/sec (cancel-inclusive)»**
-поднимаются автоматически (provisioning в `grafana/`). Панели: tokens/sec
-(Continue cancel-inclusive vs LiteLLM как отдельные ряды), litellm input/output,
-autocomplete accepted/rejected и reject-rate.
+поднимаются автоматически (provisioning в `grafana/`). Панели сгруппированы по строкам:
+
+- **Пропускная способность** — generated/prompt tokens/sec, events/sec и общий счётчик;
+  график «Continue (cancel-inclusive) vs LiteLLM (server-side)» отдельными рядами.
+- **По моделям и LiteLLM** — generated tokens/sec в разбивке по моделям; LiteLLM
+  input vs output.
+- **Автодополнение и отмены (Esc)** — accepted vs rejected, reject-rate, cache-hit
+  rate и cache hit/miss (кэш/прогрев объясняют, почему повторная отмена даёт «Complete»),
+  а также **«Rejected autocompletions/sec (рендер в минус)»** — отклонённые
+  автодополнения, отрисованные ниже нуля как индикатор отказов. Это **запросы/сек, НЕ
+  tokens/s**: dev-data Continue не несёт токенов отмены, а `accepted=false` означает
+  «показано-но-не-принято», что не равно «отменено на лету».
+- **Здоровье пайплайна** — ingest errors/sec по причине, возраст последнего события,
+  суммарные ошибки приёма.
 
 ## Ограничение
 

@@ -27,7 +27,7 @@
   "timezone": "",
   "title": "LiteLLM + Continue — tokens/sec (cancel-inclusive)",
   "uid": "tokens-per-sec",
-  "version": 2,
+  "version": 3,
   "panels": [
     {
       "id": 1,
@@ -279,18 +279,45 @@
     },
 
     {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Rejected autocompletions/sec (рендер в минус)",
+      "description": "Скорость ОТКЛОНЁННЫХ автодополнений (accepted=false), отрисованная ниже нуля как индикатор отказов. Это счётчик ЗАПРОСОВ/сек, НЕ tokens/s: dev-data Continue не несёт токенов отмены, поэтому токенно-взвешенный «минус» построить нельзя. «accepted=false» = «показано-но-не-принято», что не равно «отменено на лету» (жёсткий Esc до показа подсказки события autocomplete обычно не даёт).",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 37 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "bars", "fillOpacity": 40, "lineWidth": 1, "showPoints": "never", "gradientMode": "none" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "rejected (минус)" },
+            "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": [] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "0 - sum(rate(continue_autocomplete_total{accepted=\"false\"}[5m]))", "legendFormat": "rejected (минус)" }
+      ]
+    },
+
+    {
       "id": 16,
       "type": "row",
       "title": "Здоровье пайплайна",
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 37 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 45 },
       "panels": []
     },
     {
       "id": 17,
       "type": "timeseries",
       "title": "Ingest errors/sec по причине",
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 38 },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 46 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } },
@@ -309,7 +336,7 @@
       "id": 18,
       "type": "stat",
       "title": "Секунд с последнего события Continue",
-      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 38 },
+      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 46 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -331,7 +358,7 @@
       "id": 19,
       "type": "stat",
       "title": "Ingest errors (всего)",
-      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 38 },
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 46 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
