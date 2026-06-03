@@ -71,6 +71,13 @@ sum(rate(continue_generated_tokens_total[1m]))
 # трафик через прокси, т.е. двойной счёт; при отмене litellm к тому же недосчитывает)
 sum(rate(litellm_output_tokens_metric_total[1m]))
 
+# «скорость на запрос», как в Continue Console: completion ÷ duration (457/50.361 ≈ 9.07).
+# Взвешенное среднее Σ(output tokens) ÷ Σ(request latency). Источник — LiteLLM, поэтому
+# НЕ cancel-inclusive; требует гистограммы litellm_request_total_latency_metric на /metrics.
+# Это ИНОЕ число, чем sum(rate(...)) выше (тот делит на стену времени, включая простои).
+sum(rate(litellm_output_tokens_metric_total[5m]))
+  / sum(rate(litellm_request_total_latency_metric_sum[5m]))
+
 # прокси-доля отклонений автодополнения (НЕ доля отмен на лету)
 continue_autocomplete_reject_rate_5m
 
@@ -81,6 +88,13 @@ continue_autocomplete_reject_rate_5m
 
 Готовые recording-правила — в `prometheus/rules/continue_litellm.yml`
 (`*_per_sec_5m`, `continue_autocomplete_reject_rate_5m`, `continue_autocomplete_cache_hit_rate_5m`).
+
+> **Про окна `rate()`.** Примеры выше — с фиксированными окнами (`[1m]`/`[5m]`), потому
+> что их запускают прямо в Prometheus (:9090). На **дашборде Grafana** окна `rate()`
+> заданы как `$__rate_interval` — Grafana авто-подбирает ширину под scrape-интервал и
+> зум (≈ `max(4×scrape, шаг+scrape)`), вместо жёстких 5m. Это **переменная Grafana**: в
+> самом Prometheus и в recording-правилах её нет, поэтому правила остаются на 5m. Side
+> effect: при редком трафике короткие окна дают больше провалов `0/0`, чем `[5m]`.
 
 ## Удаление кастомных метрик (PromQL-селектор)
 
@@ -124,7 +138,13 @@ Datasource Prometheus и дашборд **«LiteLLM + Continue — tokens/sec (c
 поднимаются автоматически (provisioning в `grafana/`). Панели сгруппированы по строкам:
 
 - **Пропускная способность** — generated/prompt tokens/sec, events/sec и общий счётчик;
-  график «Continue (cancel-inclusive) vs LiteLLM (server-side)» отдельными рядами.
+  график «Continue (cancel-inclusive) vs LiteLLM (server-side)» отдельными рядами; и
+  **«Tokens/sec на запрос — completion ÷ duration»** — Console-метрика скорости одного
+  запроса (`457/50.361 ≈ 9.07`), считается из гистограммы латентности LiteLLM как
+  взвешенное среднее. ⚠️ Это **НЕ cancel-inclusive** (источник — LiteLLM, при жёсткой
+  отмене недосчитывает) и **не равно** агрегатному `sum(rate(...))`, который делит на
+  стену времени с простоями (тот же запрос там ≈ `457/300 ≈ 1.5`). Второй ряд — decode
+  speed без TTFT (валиден только для стриминга).
 - **По моделям и LiteLLM** — generated tokens/sec в разбивке по моделям; LiteLLM
   input vs output.
 - **Автодополнение и отмены (Esc)** — accepted vs rejected, reject-rate, cache-hit
@@ -135,6 +155,11 @@ Datasource Prometheus и дашборд **«LiteLLM + Continue — tokens/sec (c
   «показано-но-не-принято», что не равно «отменено на лету».
 - **Здоровье пайплайна** — ingest errors/sec по причине, возраст последнего события,
   суммарные ошибки приёма.
+
+> Окна `rate()` на всех панелях — динамические (`$__rate_interval`, не фиксированные 5m).
+> Панели reject-rate / cache-hit раньше брались из recording-правил `*_5m`; теперь их
+> выражения вынесены инлайн с `$__rate_interval`, поэтому правила в Prometheus остаются
+> (для ad-hoc-PromQL), но дашбордом не используются.
 
 ## Ограничение
 

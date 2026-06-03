@@ -27,7 +27,7 @@
   "timezone": "",
   "title": "LiteLLM + Continue — tokens/sec (cancel-inclusive)",
   "uid": "tokens-per-sec",
-  "version": 3,
+  "version": 4,
   "panels": [
     {
       "id": 1,
@@ -36,7 +36,7 @@
       "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
       "options": {
         "mode": "markdown",
-        "content": "**tokens/sec включая отменённые.** `continue_generated_tokens_total` (Continue) считает токены даже для отменённых генераций — это и есть cancel-inclusive throughput. Серверные `litellm_*` при обрыве стрима недосчитывают, поэтому ряды показаны раздельно (НЕ суммируются — это один и тот же трафик через прокси). **Отдельной «cancel tokens/sec» нет**: dev-data Continue не помечает токены отменой. Раздел *Автодополнение* показывает прокси отмен (`accepted=false`) и долю попаданий в кэш (`cache_hit`) — именно кэш/прогрев объясняют, почему повторная отмена даёт «Complete»."
+        "content": "**tokens/sec включая отменённые.** `continue_generated_tokens_total` (Continue) считает токены даже для отменённых генераций — это и есть cancel-inclusive throughput. Серверные `litellm_*` при обрыве стрима недосчитывают, поэтому ряды показаны раздельно (НЕ суммируются — это один и тот же трафик через прокси). **Отдельной «cancel tokens/sec» нет**: dev-data Continue не помечает токены отменой. Раздел *Автодополнение* показывает прокси отмен (`accepted=false`) и долю попаданий в кэш (`cache_hit`). Окна `rate()` — **динамические** (`$__rate_interval`: авто-подбор под scrape-интервал и зум, а не фиксированные 5m). Панель **«Tokens/sec на запрос»** даёт Console-метрику `completion ÷ duration` по гистограмме LiteLLM (взвешенное среднее, НЕ cancel-inclusive)."
       }
     },
 
@@ -61,7 +61,7 @@
       },
       "targets": [
         { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(continue_generated_tokens_total[1m]))", "legendFormat": "tok/s" }
+          "expr": "sum(rate(continue_generated_tokens_total[$__rate_interval]))", "legendFormat": "tok/s" }
       ]
     },
     {
@@ -77,7 +77,7 @@
       },
       "targets": [
         { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(continue_prompt_tokens_total[1m]))", "legendFormat": "tok/s" }
+          "expr": "sum(rate(continue_prompt_tokens_total[$__rate_interval]))", "legendFormat": "tok/s" }
       ]
     },
     {
@@ -93,7 +93,7 @@
       },
       "targets": [
         { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(continue_events_total[1m]))", "legendFormat": "events/s" }
+          "expr": "sum(rate(continue_events_total[$__rate_interval]))", "legendFormat": "events/s" }
       ]
     },
     {
@@ -128,9 +128,33 @@
       },
       "targets": [
         { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(continue_generated_tokens_total[5m]))", "legendFormat": "Continue generated (cancel-inclusive)" },
+          "expr": "sum(rate(continue_generated_tokens_total[$__rate_interval]))", "legendFormat": "Continue generated (cancel-inclusive)" },
         { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(litellm_output_tokens_metric_total[5m]))", "legendFormat": "LiteLLM output" }
+          "expr": "sum(rate(litellm_output_tokens_metric_total[$__rate_interval]))", "legendFormat": "LiteLLM output" }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Tokens/sec на запрос — completion ÷ duration (LiteLLM; НЕ cancel-inclusive)",
+      "description": "Console-метрика «скорость генерации»: completion tokens ÷ Duration. Для одиночного запроса со скрина = 457 / 50.361 ≈ 9.07 tok/s (как показывает Continue Console). Считается из гистограммы латентности LiteLLM как ВЗВЕШЕННОЕ среднее Σ(output tokens) ÷ Σ(request latency) по всем запросам в окне. ВАЖНО: источник — LiteLLM, поэтому при ЖЁСТКОЙ отмене стрима число недосчитывается — этот ряд НЕ cancel-inclusive (в отличие от остального дашборда, где источник Continue). Требует, чтобы litellm_request_total_latency_metric_sum реально отдавался на litellm:4000/metrics. Ряд «decode speed (без TTFT)» делит на (Duration − TTFT) и корректен ТОЛЬКО если все запросы стримятся (TTFT-гистограмма у LiteLLM — streaming-only); при не-стриминговом трафике он мусорный.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 19 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "tok/s", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(litellm_output_tokens_metric_total[$__rate_interval])) / sum(rate(litellm_request_total_latency_metric_sum[$__rate_interval]))",
+          "legendFormat": "completion ÷ duration (как в Console)" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(litellm_output_tokens_metric_total[$__rate_interval])) / (sum(rate(litellm_request_total_latency_metric_sum[$__rate_interval])) - sum(rate(litellm_llm_api_time_to_first_token_metric_sum[$__rate_interval])))",
+          "legendFormat": "decode speed (без TTFT, streaming-only)" }
       ]
     },
 
@@ -139,14 +163,14 @@
       "type": "row",
       "title": "По моделям и LiteLLM",
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 19 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
       "panels": []
     },
     {
       "id": 9,
       "type": "timeseries",
       "title": "Generated tokens/sec по моделям (Continue)",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": { "unit": "tok/s", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } },
@@ -158,14 +182,14 @@
       },
       "targets": [
         { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum by (model) (rate(continue_generated_tokens_total[5m]))", "legendFormat": "{{model}}" }
+          "expr": "sum by (model) (rate(continue_generated_tokens_total[$__rate_interval]))", "legendFormat": "{{model}}" }
       ]
     },
     {
       "id": 10,
       "type": "timeseries",
       "title": "LiteLLM input vs output tokens/sec",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": { "unit": "tok/s", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } },
@@ -177,9 +201,9 @@
       },
       "targets": [
         { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "litellm_input_tokens_per_sec_5m", "legendFormat": "input" },
+          "expr": "sum(rate(litellm_input_tokens_metric_total[$__rate_interval]))", "legendFormat": "input" },
         { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "litellm_output_tokens_per_sec_5m", "legendFormat": "output" }
+          "expr": "sum(rate(litellm_output_tokens_metric_total[$__rate_interval]))", "legendFormat": "output" }
       ]
     },
 
@@ -188,14 +212,14 @@
       "type": "row",
       "title": "Автодополнение и отмены (Esc)",
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 28 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 36 },
       "panels": []
     },
     {
       "id": 12,
       "type": "timeseries",
       "title": "Autocomplete events/sec — accepted vs rejected",
-      "gridPos": { "h": 8, "w": 10, "x": 0, "y": 29 },
+      "gridPos": { "h": 8, "w": 10, "x": 0, "y": 37 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } },
@@ -207,16 +231,16 @@
       },
       "targets": [
         { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(continue_autocomplete_total{accepted=\"true\"}[5m]))", "legendFormat": "accepted" },
+          "expr": "sum(rate(continue_autocomplete_total{accepted=\"true\"}[$__rate_interval]))", "legendFormat": "accepted" },
         { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(continue_autocomplete_total{accepted=\"false\"}[5m]))", "legendFormat": "rejected" }
+          "expr": "sum(rate(continue_autocomplete_total{accepted=\"false\"}[$__rate_interval]))", "legendFormat": "rejected" }
       ]
     },
     {
       "id": 13,
       "type": "stat",
-      "title": "Reject rate (прокси отмен, 5m)",
-      "gridPos": { "h": 8, "w": 4, "x": 10, "y": 29 },
+      "title": "Reject rate (прокси отмен, динамич. окно)",
+      "gridPos": { "h": 8, "w": 4, "x": 10, "y": 37 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -231,14 +255,14 @@
       },
       "targets": [
         { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "continue_autocomplete_reject_rate_5m", "legendFormat": "reject" }
+          "expr": "sum(rate(continue_autocomplete_total{accepted=\"false\"}[$__rate_interval])) / clamp_min(sum(rate(continue_autocomplete_total[$__rate_interval])), 1)", "legendFormat": "reject" }
       ]
     },
     {
       "id": 14,
       "type": "stat",
-      "title": "Cache-hit rate (почему «Complete», 5m)",
-      "gridPos": { "h": 8, "w": 4, "x": 14, "y": 29 },
+      "title": "Cache-hit rate (почему «Complete», динамич. окно)",
+      "gridPos": { "h": 8, "w": 4, "x": 14, "y": 37 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -253,14 +277,14 @@
       },
       "targets": [
         { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "continue_autocomplete_cache_hit_rate_5m", "legendFormat": "cache hit" }
+          "expr": "sum(rate(continue_autocomplete_total{cache_hit=\"true\"}[$__rate_interval])) / clamp_min(sum(rate(continue_autocomplete_total[$__rate_interval])), 1)", "legendFormat": "cache hit" }
       ]
     },
     {
       "id": 15,
       "type": "timeseries",
       "title": "Autocomplete cache hit vs miss (events/sec)",
-      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 29 },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 37 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } },
@@ -272,9 +296,9 @@
       },
       "targets": [
         { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(continue_autocomplete_total{cache_hit=\"true\"}[5m]))", "legendFormat": "cache hit" },
+          "expr": "sum(rate(continue_autocomplete_total{cache_hit=\"true\"}[$__rate_interval]))", "legendFormat": "cache hit" },
         { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(continue_autocomplete_total{cache_hit=\"false\"}[5m]))", "legendFormat": "cache miss" }
+          "expr": "sum(rate(continue_autocomplete_total{cache_hit=\"false\"}[$__rate_interval]))", "legendFormat": "cache miss" }
       ]
     },
 
@@ -283,7 +307,7 @@
       "type": "timeseries",
       "title": "Rejected autocompletions/sec (рендер в минус)",
       "description": "Скорость ОТКЛОНЁННЫХ автодополнений (accepted=false), отрисованная ниже нуля как индикатор отказов. Это счётчик ЗАПРОСОВ/сек, НЕ tokens/s: dev-data Continue не несёт токенов отмены, поэтому токенно-взвешенный «минус» построить нельзя. «accepted=false» = «показано-но-не-принято», что не равно «отменено на лету» (жёсткий Esc до показа подсказки события autocomplete обычно не даёт).",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 37 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 45 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -301,7 +325,7 @@
       },
       "targets": [
         { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "0 - sum(rate(continue_autocomplete_total{accepted=\"false\"}[5m]))", "legendFormat": "rejected (минус)" }
+          "expr": "0 - sum(rate(continue_autocomplete_total{accepted=\"false\"}[$__rate_interval]))", "legendFormat": "rejected (минус)" }
       ]
     },
 
@@ -310,14 +334,14 @@
       "type": "row",
       "title": "Здоровье пайплайна",
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 45 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 53 },
       "panels": []
     },
     {
       "id": 17,
       "type": "timeseries",
       "title": "Ingest errors/sec по причине",
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 46 },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 54 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } },
@@ -329,14 +353,14 @@
       },
       "targets": [
         { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum by (reason) (rate(continue_ingest_errors_total[5m]))", "legendFormat": "{{reason}}" }
+          "expr": "sum by (reason) (rate(continue_ingest_errors_total[$__rate_interval]))", "legendFormat": "{{reason}}" }
       ]
     },
     {
       "id": 18,
       "type": "stat",
       "title": "Секунд с последнего события Continue",
-      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 46 },
+      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 54 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -358,7 +382,7 @@
       "id": 19,
       "type": "stat",
       "title": "Ingest errors (всего)",
-      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 46 },
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 54 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
