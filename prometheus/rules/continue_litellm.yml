@@ -35,3 +35,44 @@ groups:
       # и завершаются мгновенно — отсюда «Complete» вместо отменяемого запроса.
       - record: continue_autocomplete_cache_hit_rate_5m
         expr: sum(rate(continue_autocomplete_total{cache_hit="true"}[5m])) / clamp_min(sum(rate(continue_autocomplete_total[5m])), 1)
+
+  # --- Разрезы по пользователям и моделям (Continue, client-side, cancel-inclusive) ---
+  # ВАЖНО: метка user = Continue userId (идентичность Continue Hub). При локальном
+  # VS Code без логина она часто пустая → серии схлопываются в user="unknown".
+  # Сначала проверьте на деплой-машине, что userId реально заполнен (см. README).
+  # Тип активности (autocomplete vs chat) различим ТОЛЬКО на стороне Continue, через
+  # event_name — LiteLLM этого не видит. Recording-правила остаются на фиксированных 5m
+  # ($__rate_interval — переменная Grafana, в Prometheus её нет; на дашборде разрезы
+  # инлайн с $__rate_interval).
+  - name: continue_by_user_model
+    rules:
+      # КЛЮЧЕВОЕ правило для вопроса «кто чаще пользуется autocomplete или чатом».
+      - record: continue_events_per_sec_by_user_event_5m
+        expr: sum by (user, event_name) (rate(continue_events_total[5m]))
+
+      # tokens/sec (cancel-inclusive) в разбивке по пользователям и по моделям.
+      - record: continue_generated_tokens_per_sec_by_user_5m
+        expr: sum by (user) (rate(continue_generated_tokens_total[5m]))
+
+      - record: continue_generated_tokens_per_sec_by_model_5m
+        expr: sum by (model) (rate(continue_generated_tokens_total[5m]))
+
+      # Принятые/отклонённые автодополнения по пользователям (запросы/сек, НЕ токены).
+      - record: continue_autocomplete_per_sec_by_user_accepted_5m
+        expr: sum by (user, accepted) (rate(continue_autocomplete_total[5m]))
+
+  # --- Разрезы по пользователям и моделям (LiteLLM, server-side, НЕ cancel-inclusive) ---
+  # Авторитетный мульти-пользовательский учёт: метка end_user = X-OpenWebUI-User-Email
+  # (роль customer), user = X-OpenWebUI-User-Id (роль internal_user) — через
+  # general_settings.user_header_mappings. КАВЕТЫ: (1) на образе main-stable
+  # user_header_mappings, по баг-репорту litellm#14667, может НЕ мапиться с OpenWebUI →
+  # метки end_user/user окажутся пустыми; (2) end_user-учёт в Prometheus может требовать
+  # enterprise-лицензии. Проверьте на /metrics, что end_user заполнен, прежде чем верить
+  # этим панелям. Группируем по end_user (человекочитаемый email); если пуст — по user.
+  - name: litellm_by_user_model
+    rules:
+      - record: litellm_output_tokens_per_sec_by_end_user_model_5m
+        expr: sum by (end_user, model) (rate(litellm_output_tokens_metric_total[5m]))
+
+      - record: litellm_output_tokens_per_sec_by_user_model_5m
+        expr: sum by (user, model) (rate(litellm_output_tokens_metric_total[5m]))

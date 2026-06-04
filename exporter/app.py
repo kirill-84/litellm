@@ -15,7 +15,7 @@ PORT = int(os.getenv("PORT", "4010"))
 JOURNAL_PATH = Path(os.getenv("JOURNAL_PATH", "/data/events.jsonl"))
 STATE_PATH = Path(os.getenv("STATE_PATH", "/data/state.json"))
 
-app = FastAPI(title="Continue Telemetry Exporter", version="2.0.0")
+app = FastAPI(title="Continue Telemetry Exporter", version="2.1.0")
 lock = threading.Lock()
 seen_ids: set[str] = set()
 
@@ -25,28 +25,45 @@ registry = CollectorRegistry()
 #   {"name": <eventName>, "data": {...реальные поля...}, "schema": ..., "level": ..., "profileId": ...}
 # Поэтому тип события берём из top-level "name", а поля (model/provider/токены/accepted) — из "data".
 #
+# Про метку user: у КАЖДОГО события dev-data 0.2.0 в "data" есть базовое поле
+# userId (см. base.ts схемы Continue). Это идентичность Continue (Hub), а НЕ
+# пользователь OpenWebUI: при локальном VS Code без логина в Continue Hub userId
+# часто пустой → метка станет "unknown". Авторитетный мульти-пользовательский
+# учёт по людям живёт на стороне LiteLLM (метки end_user/user из user_header_mappings),
+# а здесь user даёт разрез «кто чем пользуется» только если userId реально заполнен.
+# Тип активности (autocomplete vs chat vs edit) виден ТОЛЬКО здесь — через event_name;
+# LiteLLM его не различает (видит лишь модель). Поэтому «кто чаще autocomplete или chat»
+# берётся из continue_events_total by (user, event_name) — отдельный счётчик чата не нужен.
+#
 # Про отмены (cancel): событие tokensGenerated НЕ несёт признака отмены и не имеет
 # id для связи с событием autocomplete. При этом Continue (_logEnd) логирует
 # tokensGenerated даже при abort, с частично сгенерированными токенами — то есть
 # суммарный continue_generated_tokens_total УЖЕ включает отменённые запросы
 # (cancel-inclusive). Выделить токены именно отмен из dev-data невозможно.
+#
+# Про разрез по моделям: tokensGenerated несёт model/provider, autocomplete —
+# modelName/modelProvider, chatInteraction — modelName/modelProvider/modelTitle.
+# Значения метки model МОГУТ не совпадать с метками model у litellm_* (разные
+# идентификаторы у Continue/OpenWebUI/LiteLLM) — группируйте в пределах источника.
 
 continue_events_total = Counter(
     "continue_events_total",
-    "Total Continue telemetry events received.",
-    ["event_name", "model", "provider"],
+    "Total Continue telemetry events received. event_name распознаёт тип активности "
+    "(autocomplete / chatInteraction / editOutcome / tokensGenerated / toolUsage); "
+    "разрез by (user, event_name) отвечает на вопрос «кто чаще autocomplete или chat».",
+    ["event_name", "user", "model", "provider"],
     registry=registry,
 )
 continue_prompt_tokens_total = Counter(
     "continue_prompt_tokens_total",
     "Prompt tokens reported by Continue (tokensGenerated events; cancel-inclusive).",
-    ["model", "provider"],
+    ["user", "model", "provider"],
     registry=registry,
 )
 continue_generated_tokens_total = Counter(
     "continue_generated_tokens_total",
     "Generated tokens reported by Continue (tokensGenerated events; cancel-inclusive).",
-    ["model", "provider"],
+    ["user", "model", "provider"],
     registry=registry,
 )
 continue_autocomplete_total = Counter(
@@ -55,13 +72,13 @@ continue_autocomplete_total = Counter(
     "NOT a true mid-stream cancel). cache_hit=true means Continue served the suggestion "
     "from its LRU cache WITHOUT calling the LLM — that's why a repeated request finishes "
     "instantly and shows up as 'Complete' instead of being cancellable.",
-    ["accepted", "cache_hit", "model", "provider"],
+    ["accepted", "cache_hit", "user", "model", "provider"],
     registry=registry,
 )
 continue_last_event_timestamp = Gauge(
     "continue_last_event_timestamp_seconds",
     "Unix timestamp of the last accepted Continue event.",
-    ["event_name", "model", "provider"],
+    ["event_name", "user", "model", "provider"],
     registry=registry,
 )
 continue_ingest_errors_total = Counter(
@@ -170,6 +187,9 @@ def _record_event(payload: dict[str, Any]) -> bool:
     event_name, data = _unwrap(payload)
     model = _pick(data, "model", "modelName")
     provider = _pick(data, "provider", "modelProvider")
+    # userId — базовое поле всех событий dev-data 0.2.0; пустое при локальном VS Code
+    # без логина в Continue Hub → "unknown".
+    user = _pick(data, "userId", "user", "userEmail")
     event_key = _event_id(event_name, data)
 
     if event_key in seen_ids:
@@ -178,9 +198,9 @@ def _record_event(payload: dict[str, Any]) -> bool:
     seen_ids.add(event_key)
     _write_journal(payload)
 
-    continue_events_total.labels(event_name=event_name, model=model, provider=provider).inc()
+    continue_events_total.labels(event_name=event_name, user=user, model=model, provider=provider).inc()
     continue_last_event_timestamp.labels(
-        event_name=event_name, model=model, provider=provider
+        event_name=event_name, user=user, model=model, provider=provider
     ).set(_parse_timestamp(data))
 
     if event_name == "tokensGenerated":
@@ -189,12 +209,13 @@ def _record_event(payload: dict[str, Any]) -> bool:
             data,
             ("generatedTokens", "generated_tokens", "completionTokens", "completion_tokens", "outputTokens", "output_tokens"),
         )
-        continue_prompt_tokens_total.labels(model=model, provider=provider).inc(prompt_tokens)
-        continue_generated_tokens_total.labels(model=model, provider=provider).inc(generated_tokens)
+        continue_prompt_tokens_total.labels(user=user, model=model, provider=provider).inc(prompt_tokens)
+        continue_generated_tokens_total.labels(user=user, model=model, provider=provider).inc(generated_tokens)
     elif event_name == "autocomplete":
         continue_autocomplete_total.labels(
             accepted=_tri_bool(data.get("accepted")),
             cache_hit=_tri_bool(data.get("cacheHit")),
+            user=user,
             model=model,
             provider=provider,
         ).inc()

@@ -56,6 +56,62 @@ docker compose up -d --build continue-exporter   # или просто up -d --b
   «cancel tokens/sec» как отдельной метрики не существует; доступна лишь прокси-доля
   отклонений по `accepted` (показано-но-не-принято), не взвешенная по токенам.
 
+## Метрики по пользователям и моделям
+
+Цель — видеть, **кто чем больше пользуется** (autocomplete vs chat) и **по каким моделям**.
+Есть **два независимых источника идентичности**, и они отвечают на разные вопросы — это
+важно, потому что у каждого свой изъян:
+
+| Вопрос | Источник | Метки | Изъян |
+| --- | --- | --- | --- |
+| Кто чаще **autocomplete или chat** | Continue (экспортер, client-side, cancel-inclusive) | `continue_events_total{user, event_name}` | тип активности виден **только тут** (LiteLLM его не различает), но `user`=Continue `userId` |
+| Кто сколько **токенов** сжёг по моделям | LiteLLM (`/metrics`, server-side) | `litellm_*{end_user, user, model}` | авторитетный per-user, но **НЕ** cancel-inclusive |
+
+- **Тип активности (autocomplete / chat / edit) различим только на стороне Continue** —
+  через `event_name`. LiteLLM видит лишь модель. У вас модели разведены по ролям
+  (Qwen2.5 → autocomplete, LLama3 → chat/edit), поэтому per-model на LiteLLM косвенно =
+  per-role; но точный «кто чатился» даёт только Continue.
+- **`user` в Continue = `userId`** — это идентичность Continue (Hub), а **не** пользователь
+  OpenWebUI. На локальном VS Code без логина в Continue Hub `userId` **часто пустой** →
+  метка схлопывается в `user="unknown"`.
+- **`end_user`/`user` в LiteLLM** заполняются из `general_settings.user_header_mappings`:
+  `X-OpenWebUI-User-Email` → роль `customer` → метка **`end_user`** (человекочитаемый email),
+  `X-OpenWebUI-User-Id` → роль `internal_user` → метка **`user`**.
+- **Метка `model` НЕ совпадает между источниками** (у Continue это имя модели Continue/
+  OpenWebUI, у LiteLLM — `model_name` прокси). Группируйте в пределах одного источника.
+
+> **⚠️ Каветы LiteLLM-пути (проверьте на живом стеке, прежде чем верить панелям):**
+> - `user_header_mappings` по открытому багу [litellm#14667](https://github.com/BerriAI/litellm/issues/14667)
+>   **может не мапиться с OpenWebUI** именно на `main-stable` (ваш образ) → метки
+>   `end_user`/`user` будут пустыми. Фолбэк, который LiteLLM проверяет всегда (без
+>   `user_header_mappings`): заставить OpenWebUI слать `x-litellm-end-user-id`.
+> - end_user-учёт в Prometheus может требовать enterprise-лицензии (флаг
+>   `enable_end_user_cost_tracking_prometheus_only` уже выставлен).
+
+> **Масштабирование на любое число моделей.** Разрез по моделям — полностью label-based:
+> метрики размечены меткой `model`, правила используют `sum by (model)`, а в дашборде
+> переменная `$model` (`label_values(...)`) подхватывает любые модели **автоматически** —
+> добавление моделей в `model_list` не требует правок кода или панелей (`continue/config.yaml`
+> с Qwen/LLama — лишь пример). Единственное условие для **серверных** `litellm_*` по модели:
+> её трафик должен идти через этот LiteLLM (т.е. модель присутствует в `model_list`). Модель,
+> которую Continue зовёт мимо прокси, в `litellm_*` не появится — её видно только client-side
+> (события Continue, в т.ч. `chatInteraction`). Имена моделей у Continue/OpenWebUI и LiteLLM
+> могут не совпадать → группируйте в пределах одного источника.
+
+> **Headline-проверка (на деплой-машине; решает, будут ли реальные имена вместо `unknown`):**
+> ```bash
+> # 1) Заполнен ли Continue userId? (если везде "" — per-user из экспортера будет unknown)
+> docker exec continue-exporter \
+>   sh -c 'grep -o "\"userId\":[^,}]*" /data/events.jsonl | sort | uniq -c'
+> # 2) Заполнены ли метки LiteLLM end_user/user? (если пусто — это #14667 / лицензия)
+> curl -s localhost:4000/metrics | grep 'litellm_output_tokens_metric_total' | grep -E 'end_user="[^"]+"|user="[^"]+"'
+> # 3) Реально ли прилетает chatInteraction (иначе «chat»-половина панелей будет пустой)?
+> docker exec continue-exporter \
+>   sh -c 'grep -o "\"name\":\"[^\"]*\"" /data/events.jsonl | sort | uniq -c'
+> ```
+> Риски **связаны**: если `userId` пуст **и** сработал #14667 — per-user данных нет
+> нигде; тогда чините хотя бы один путь.
+
 ## Continue (на dev-машине)
 
 `continue/config.yaml` шлёт телеметрию на экспортер. Ключевое: `level: noCode` (в журнал
@@ -78,6 +134,19 @@ sum(rate(litellm_output_tokens_metric_total[1m]))
 sum(rate(litellm_output_tokens_metric_total[5m]))
   / sum(rate(litellm_request_total_latency_metric_sum[5m]))
 
+# --- По пользователям и моделям (подробности и каветы — в разделе ниже) ---
+# «Кто чаще autocomplete или chat» (Continue, client-side): тип активности есть ТОЛЬКО тут,
+# через event_name. Метка user = Continue userId (часто пуста на локальном VS Code).
+sum by (user, event_name) (rate(continue_events_total{event_name=~"autocomplete|chatInteraction|editOutcome"}[5m]))
+
+# tokens/sec (cancel-inclusive) по пользователям и по моделям
+sum by (user)  (rate(continue_generated_tokens_total[5m]))
+sum by (model) (rate(continue_generated_tokens_total[5m]))
+
+# авторитетный per-user учёт LiteLLM через user_header_mappings (server-side, НЕ cancel-inclusive):
+# end_user = X-OpenWebUI-User-Email, user = X-OpenWebUI-User-Id. Если ряды пусты — см. каветы ниже.
+sum by (end_user, model) (rate(litellm_output_tokens_metric_total[5m]))
+
 # прокси-доля отклонений автодополнения (НЕ доля отмен на лету)
 continue_autocomplete_reject_rate_5m
 
@@ -87,7 +156,10 @@ continue_autocomplete_reject_rate_5m
 ```
 
 Готовые recording-правила — в `prometheus/rules/continue_litellm.yml`
-(`*_per_sec_5m`, `continue_autocomplete_reject_rate_5m`, `continue_autocomplete_cache_hit_rate_5m`).
+(`*_per_sec_5m`, `continue_autocomplete_reject_rate_5m`, `continue_autocomplete_cache_hit_rate_5m`,
+а также разрезы по пользователям/моделям: `continue_events_per_sec_by_user_event_5m`,
+`continue_generated_tokens_per_sec_by_user_5m`/`_by_model_5m`,
+`litellm_output_tokens_per_sec_by_end_user_model_5m`/`_by_user_model_5m`).
 
 > **Про окна `rate()`.** Примеры выше — с фиксированными окнами (`[1m]`/`[5m]`), потому
 > что их запускают прямо в Prometheus (:9090). На **дашборде Grafana** окна `rate()`
@@ -155,6 +227,14 @@ Datasource Prometheus и дашборд **«LiteLLM + Continue — tokens/sec (c
   «показано-но-не-принято», что не равно «отменено на лету».
 - **Здоровье пайплайна** — ingest errors/sec по причине, возраст последнего события,
   суммарные ошибки приёма.
+- **По пользователям и активности** — отвечает на «кто чем больше пользуется»:
+  *autocomplete vs chat по пользователям* (`continue_events_total` by `user, event_name` —
+  тип активности есть только client-side), *generated tokens/sec по пользователям*
+  (cancel-inclusive), *LiteLLM output tokens/sec по `end_user, model`* (авторитетный
+  per-user, но НЕ cancel-inclusive — ⚠️ при пустых рядах см. #14667/лицензию выше) и
+  *таблица-лидерборд* событий по пользователю и типу за период. Вверху дашборда —
+  переменные **`$user`** и **`$model`** (мультивыбор) для фильтрации рядов Continue;
+  при пустом Continue `userId` пользователь будет один — `unknown`.
 
 > Окна `rate()` на всех панелях — динамические (`$__rate_interval`, не фиксированные 5m).
 > Панели reject-rate / cache-hit раньше брались из recording-правил `*_5m`; теперь их
