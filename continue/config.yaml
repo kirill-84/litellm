@@ -6,9 +6,11 @@ models:
   - name: Qwen2.5
     provider: openai
     model: qwen2.5-coder-3b-instruct-q8_0:latest
-    apiBase: http://10.0.3.132:4000
-    # apiKey ДОЛЖЕН совпадать с LITELLM_MASTER_KEY прокси из .env (иначе 401).
-    apiKey: sk-super-secret-master-key
+    env:
+      useLegacyCompletionsEndpoint: false
+    # openwebui v0.9.6
+    apiBase: http://0.0.0.0:3000/api
+    apiKey: YOUR_OPEN_WEBUI_API_KEY
     roles:
       - autocomplete
     autocompleteOptions:
@@ -22,9 +24,33 @@ models:
     requestOptions:
       extraBodyProperties:
         think: false
+  - name: LLama3
+    provider: openai
+    model: Meta-Llama-3-8B-Instruct-Q4_K_M.gguf
+    env:
+      useLegacyCompletionsEndpoint: false
+    apiBase: http://localhost:3000/api
+    apiKey: YOUR_OPEN_WEBUI_API_KEY
+    roles:
+      - chat
+      - edit
+    defaultCompletionOptions:
+      temperature: 0.2
+      maxTokens: 4096
+    requestOptions:
+      timeout: 150000
 
 rules:
   - Give concise responses
+
+context:
+  - provider: code
+  - provider: docs
+  - provider: diff
+  - provider: terminal
+  - provider: problems
+  - provider: folder
+  - provider: codebase
 
 data:
   - name: Continue Telemetry Exporter
