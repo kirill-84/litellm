@@ -114,7 +114,7 @@
    },
    "options": {
     "mode": "markdown",
-    "content": "**tokens/sec включая отменённые.** `continue_generated_tokens_total` (Continue) считает токены даже для отменённых генераций — это и есть cancel-inclusive throughput. Серверные `litellm_*` при обрыве стрима недосчитывают, поэтому ряды показаны раздельно (НЕ суммируются — это один и тот же трафик через прокси). **Отдельной «cancel tokens/sec» нет**: dev-data Continue не помечает токены отменой. Раздел *Автодополнение* показывает прокси отмен (`accepted=false`) и долю попаданий в кэш (`cache_hit`). Окна `rate()` — **динамические** (`$__rate_interval`: авто-подбор под scrape-интервал и зум, а не фиксированные 5m). Панель **«Tokens/sec на запрос»** даёт Console-метрику `completion ÷ duration` по гистограмме LiteLLM (взвешенное среднее, НЕ cancel-inclusive). Ряд **«По пользователям и активности»** отвечает «кто чаще autocomplete или chat»: разрез Continue `by (user, event_name)` (метка user=Continue userId — при локальном VS Code может быть пустой) плюс авторитетный per-user учёт LiteLLM `by (end_user, model)` через `user_header_mappings` (end_user=email из OpenWebUI; если пусто — см. litellm#14667). Переменные `$user`/`$model` фильтруют ряды Continue."
+    "content": "**tokens/sec включая отменённые.** `continue_generated_tokens_total` (Continue) считает токены даже для отменённых генераций - это и есть cancel-inclusive throughput. Серверные `litellm_*` при обрыве стрима недосчитывают, поэтому ряды показаны раздельно (НЕ суммируются - это один и тот же трафик через прокси). **Отдельной «cancel tokens/sec» нет**: dev-data Continue не помечает токены отменой. Раздел *Автодополнение* показывает прокси отмен (`accepted=false`) и долю попаданий в кэш (`cache_hit`). Окна `rate()` - **динамические** (`$__rate_interval`: авто-подбор под scrape-интервал и зум, а не фиксированные 5m). Панель **'Tokens/sec на запрос'** даёт Console-метрику `completion ÷ duration` по гистограмме LiteLLM (взвешенное среднее, НЕ cancel-inclusive). Ряд **'По пользователям и активности'** отвечает 'кто чаще чем пользуется autocomplete или chat': разрез Continue `by (user, event_name)` (метка user=Continue userId - при локальном VS Code может быть пустой) плюс авторитетный per-user учёт LiteLLM `by (end_user, model)` через `user_header_mappings` (end_user=email из OpenWebUI; если пусто - см. litellm#14667). Переменные `$user`/`$model` фильтруют ряды Continue."
    }
   },
   {
@@ -312,7 +312,7 @@
   {
    "id": 7,
    "type": "timeseries",
-   "title": "Output tokens/sec — Continue (cancel-inclusive) vs LiteLLM (server-side)",
+   "title": "Output tokens/sec - Continue (cancel-inclusive) vs LiteLLM (server-side)",
    "gridPos": {
     "h": 8,
     "w": 24,
@@ -375,7 +375,7 @@
    "id": 21,
    "type": "timeseries",
    "title": "Tokens/sec на запрос — completion ÷ duration (LiteLLM; НЕ cancel-inclusive)",
-   "description": "Console-метрика «скорость генерации»: completion tokens ÷ Duration. Для одиночного запроса со скрина = 457 / 50.361 ≈ 9.07 tok/s (как показывает Continue Console). Считается из гистограммы латентности LiteLLM как ВЗВЕШЕННОЕ среднее Σ(output tokens) ÷ Σ(request latency) по всем запросам в окне. ВАЖНО: источник — LiteLLM, поэтому при ЖЁСТКОЙ отмене стрима число недосчитывается — этот ряд НЕ cancel-inclusive (в отличие от остального дашборда, где источник Continue). Требует, чтобы litellm_request_total_latency_metric_sum реально отдавался на litellm:4000/metrics. Ряд «decode speed (без TTFT)» делит на (Duration − TTFT) и корректен ТОЛЬКО если все запросы стримятся (TTFT-гистограмма у LiteLLM — streaming-only); при не-стриминговом трафике он мусорный.",
+   "description": "Console-метрика «скорость генерации»: completion tokens ÷ Duration. Для одиночного запроса со скрина = 457 / 50.361 ~ 9.07 tok/s (как показывает Continue Console). Считается из гистограммы латентности LiteLLM как ВЗВЕШЕННОЕ среднее (output tokens) / (request latency) по всем запросам в окне. ВАЖНО: источник - LiteLLM, поэтому при ЖЁСТКОЙ отмене стрима число недосчитывается - этот ряд НЕ cancel-inclusive (в отличие от остального дашборда, где источник Continue). Требует, чтобы litellm_request_total_latency_metric_sum реально отдавался на litellm:4000/metrics. Ряд 'decode speed (без TTFT)' делит на (Duration - TTFT) и корректен ТОЛЬКО если все запросы стримятся (TTFT-гистограмма у LiteLLM - streaming-only); при не-стриминговом трафике он мусорный.",
    "gridPos": {
     "h": 8,
     "w": 24,
@@ -572,7 +572,7 @@
   {
    "id": 12,
    "type": "timeseries",
-   "title": "Autocomplete events/sec — accepted vs rejected",
+   "title": "Autocomplete events/sec - accepted vs rejected",
    "gridPos": {
     "h": 8,
     "w": 10,
@@ -693,7 +693,7 @@
   {
    "id": 14,
    "type": "stat",
-   "title": "Cache-hit rate (почему «Complete», динамич. окно)",
+   "title": "Cache-hit rate (почему 'Complete', динамич. окно)",
    "gridPos": {
     "h": 8,
     "w": 4,
@@ -807,7 +807,7 @@
    "id": 20,
    "type": "timeseries",
    "title": "Rejected autocompletions/sec (рендер в минус)",
-   "description": "Скорость ОТКЛОНЁННЫХ автодополнений (accepted=false), отрисованная ниже нуля как индикатор отказов. Это счётчик ЗАПРОСОВ/сек, НЕ tokens/s: dev-data Continue не несёт токенов отмены, поэтому токенно-взвешенный «минус» построить нельзя. «accepted=false» = «показано-но-не-принято», что не равно «отменено на лету» (жёсткий Esc до показа подсказки события autocomplete обычно не даёт).",
+   "description": "Скорость ОТКЛОНЁННЫХ автодополнений (accepted=false), отрисованная ниже нуля как индикатор отказов. Это счётчик ЗАПРОСОВ/сек, НЕ tokens/s: dev-data Continue не несёт токенов отмены, поэтому токенно-взвешенный «минус» построить нельзя. 'accepted=false' = 'показано-но-не-принято', что не равно 'отменено на лету' (жёсткий Esc до показа подсказки события autocomplete обычно не даёт).",
    "gridPos": {
     "h": 8,
     "w": 24,
@@ -1070,7 +1070,7 @@
    "id": 23,
    "type": "timeseries",
    "title": "Кто чаще: autocomplete vs chat по пользователям (Continue)",
-   "description": "События/сек по типу активности и пользователю — прямой ответ на «кто чаще autocomplete или chat». Источник — Continue (client-side, cancel-inclusive по природе событий). Метка user = Continue userId: при локальном VS Code без логина в Continue Hub часто пустая → user=\"unknown\". tokensGenerated исключён намеренно (это не тип активности). Тип активности виден ТОЛЬКО здесь — LiteLLM его не различает.",
+   "description": "События/сек по типу активности и пользователю - прямой ответ на \"кто чаще что использует autocomplete или chat\". Источник - Continue (client-side, cancel-inclusive по природе событий). Метка user = Continue userId: при локальном VS Code без логина в Continue Hub часто пустая - user=\"unknown\". tokensGenerated исключён намеренно (это не тип активности). Тип активности виден ТОЛЬКО здесь — LiteLLM его не различает.",
    "gridPos": {
     "h": 8,
     "w": 12,
@@ -1123,7 +1123,7 @@
    "id": 24,
    "type": "timeseries",
    "title": "Generated tokens/sec по пользователям (Continue, cancel-inclusive)",
-   "description": "Скорость генерации токенов по пользователям, включая отменённые генерации (cancel-inclusive). Метка user — Continue userId (см. предупреждение про пустой userId).",
+   "description": "Скорость генерации токенов по пользователям, включая отменённые генерации (cancel-inclusive). Метка user - Continue userId (см. предупреждение про пустой userId).",
    "gridPos": {
     "h": 8,
     "w": 12,
@@ -1176,7 +1176,7 @@
    "id": 25,
    "type": "timeseries",
    "title": "LiteLLM output tokens/sec по пользователям и моделям (server-side)",
-   "description": "Авторитетный per-user учёт через заголовки OpenWebUI. end_user = X-OpenWebUI-User-Email (роль customer); user = X-OpenWebUI-User-Id (роль internal_user) — задаётся general_settings.user_header_mappings. ⚠️ Если ряды ПУСТЫЕ: либо user_header_mappings не сработал с OpenWebUI на main-stable (баг litellm#14667), либо end_user-учёт требует enterprise-лицензии — тогда смените end_user на user в запросе. НЕ cancel-inclusive (при жёсткой отмене недосчитывает). Метка model здесь — модель LiteLLM, может НЕ совпадать со значением model у Continue. Этот фильтр НЕ зависит от $user/$model (другие метки).",
+   "description": "Авторитетный per-user учёт через заголовки OpenWebUI. end_user = X-OpenWebUI-User-Email (роль customer); user = X-OpenWebUI-User-Id (роль internal_user) — задаётся general_settings.user_header_mappings. !!! Если ряды ПУСТЫЕ: либо user_header_mappings не сработал с OpenWebUI на main-stable (баг litellm#14667), либо end_user-учёт требует enterprise-лицензии - тогда смените end_user на user в запросе. НЕ cancel-inclusive (при жёсткой отмене недосчитывает). Метка model здесь - модель LiteLLM, может НЕ совпадать со значением model у Continue. Этот фильтр НЕ зависит от $user/$model (другие метки).",
    "gridPos": {
     "h": 8,
     "w": 12,
@@ -1229,7 +1229,7 @@
    "id": 26,
    "type": "table",
    "title": "Лидерборд: события по пользователю и типу (за период дашборда)",
-   "description": "Суммарное число событий за выбранный диапазон времени дашборда ($__range) — взгляд «кто чем больше пользуется» одним кликом. Сортируйте по Value. Источник — Continue; user=\"unknown\" при пустом Continue userId.",
+   "description": "Суммарное число событий за выбранный диапазон времени дашборда ($__range) - взгляд \"кто чем больше пользуется\" одним кликом. Сортируйте по Value. Источник - Continue; user=\"unknown\" при пустом Continue userId.",
    "gridPos": {
     "h": 8,
     "w": 12,
