@@ -28,11 +28,11 @@ registry = CollectorRegistry()
 # Про метку user: у КАЖДОГО события dev-data 0.2.0 в "data" есть базовое поле
 # userId (см. base.ts схемы Continue). Это идентичность Continue (Hub), а НЕ
 # пользователь OpenWebUI: при локальном VS Code без логина в Continue Hub userId
-# часто пустой → метка станет "unknown". Авторитетный мульти-пользовательский
+# часто пустой - метка станет "unknown". Авторитетный мульти-пользовательский
 # учёт по людям живёт на стороне LiteLLM (метки end_user/user из user_header_mappings),
 # а здесь user даёт разрез «кто чем пользуется» только если userId реально заполнен.
-# Тип активности (autocomplete vs chat vs edit) виден ТОЛЬКО здесь — через event_name;
-# LiteLLM его не различает (видит лишь модель). Поэтому «кто чаще autocomplete или chat»
+# Тип активности (autocomplete vs chat vs edit) виден ТОЛЬКО здесь - через event_name;
+# LiteLLM его не различает (видит лишь модель). Поэтому "кто чаще autocomplete или chat"
 # берётся из continue_events_total by (user, event_name) — отдельный счётчик чата не нужен.
 #
 # Про отмены (cancel): событие tokensGenerated НЕ несёт признака отмены и не имеет
