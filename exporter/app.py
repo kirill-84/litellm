@@ -22,7 +22,7 @@ seen_ids: set[str] = set()
 registry = CollectorRegistry()
 
 # Continue dev-data HTTP destination присылает КОНВЕРТ:
-#   {"name": <eventName>, "data": {...реальные поля...}, "schema": ..., "level": ..., "profileId": ...}
+# {"name": <eventName>, "data": {...реальные поля...}, "schema": ..., "level": ..., "profileId": ...}
 # Поэтому тип события берём из top-level "name", а поля (model/provider/токены/accepted) — из "data".
 #
 # Про метку user: у КАЖДОГО события dev-data 0.2.0 в "data" есть базовое поле
@@ -44,13 +44,13 @@ registry = CollectorRegistry()
 # Про разрез по моделям: tokensGenerated несёт model/provider, autocomplete —
 # modelName/modelProvider, chatInteraction — modelName/modelProvider/modelTitle.
 # Значения метки model МОГУТ не совпадать с метками model у litellm_* (разные
-# идентификаторы у Continue/OpenWebUI/LiteLLM) — группируйте в пределах источника.
+# идентификаторы у Continue/OpenWebUI/LiteLLM) — группировка в пределах источника.
 
 continue_events_total = Counter(
     "continue_events_total",
     "Total Continue telemetry events received. event_name распознаёт тип активности "
     "(autocomplete / chatInteraction / editOutcome / tokensGenerated / toolUsage); "
-    "разрез by (user, event_name) отвечает на вопрос «кто чаще autocomplete или chat».",
+    "разрез by (user, event_name) отвечает на вопрос 'кто чем больше пользуется - autocomplete или chat'.",
     ["event_name", "user", "model", "provider"],
     registry=registry,
 )
@@ -140,7 +140,7 @@ def _unwrap(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     """Развернуть конверт Continue в (event_name, data).
 
     Continue шлёт {"name": ..., "data": {...}, "schema": ...}. Если этого конверта
-    нет (другой клиент / старый формат) — трактуем payload как плоское событие.
+    нет (другой клиент / старый формат) - трактуем payload как плоское событие.
     """
     inner = payload.get("data")
     if isinstance(inner, dict) and ("name" in payload or "schema" in payload):
@@ -187,8 +187,8 @@ def _record_event(payload: dict[str, Any]) -> bool:
     event_name, data = _unwrap(payload)
     model = _pick(data, "model", "modelName")
     provider = _pick(data, "provider", "modelProvider")
-    # userId — базовое поле всех событий dev-data 0.2.0; пустое при локальном VS Code
-    # без логина в Continue Hub → "unknown".
+    # userId - базовое поле всех событий dev-data 0.2.0; пустое при локальном VS Code
+    # без логина в Continue Hub может быть "unknown".
     user = _pick(data, "userId", "user", "userEmail")
     event_key = _event_id(event_name, data)
 
