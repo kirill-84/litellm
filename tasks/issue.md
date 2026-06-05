@@ -76,4 +76,5 @@ general_settings:
 ```
 
 Посмотри, может быть тогда лучше объединить данные `continue_` и `litellm_` для построения графиков?\
-Возможно конечно нужны дополнительные пользовательские заголовки от Continue: https://docs.litellm.ai/docs/tutorials/openweb_ui#add-custom-headers-to-spend-tracking
+Возможно конечно нужны дополнительные пользовательские заголовки от Continue: https://docs.litellm.ai/docs/tutorials/openweb_ui#add-custom-headers-to-spend-tracking\
+В помощь справка по Logging: https://docs.litellm.ai/docs/proxy/logging
