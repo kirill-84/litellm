@@ -6,8 +6,31 @@
 Раздел - Автодополнение и отмены (Esc) оставляем, но хочется получать более подробную статистику от всех пользователях {accepted="true"} и {accepted="false"}, возможно совмещать статистику от 'litellm'.
 
 И проверь еще раз пожалуйста вопрос со скоростью генерации токенов в сек.\
-В `Continue` же приходят данные `tokensGenerated` и `TTFT (To First Token)`. По формуле же можно понять скорость генерации токенов в сек: `tokensGenerated` / `TTFT`.\
-Или `tokensGenerated` это уже и есть скорость генерации токенов в сек? 
+В `Continue` же приходят данные `tokensGenerated` и `Total Time`. По формуле же можно понять скорость генерации токенов в сек: `tokensGenerated` / `Total Time`.\
+Или `tokensGenerated` это уже и есть скорость генерации токенов в сек?
+
+Или брать скорость генерации токенов в сек. через метрики и Metadata в `litellm`?
+
+**Metrics**
+```
+Duration: 0.227 s
+```
+
+**Metadata**
+```
+{
+  "status": null,
+  "max_retries": 2,
+  "batch_models": null,
+  "usage_object": {
+    "total_tokens": 211,
+    "prompt_tokens": 209,
+    "completion_tokens": 2,
+    ...
+  }
+...
+}
+```
 
 ## Раздел - По пользователям и активности (кто чем пользуется)
 
@@ -49,8 +72,6 @@ general_settings:
   }
 }
 ```
-
-
 
 Посмотри, может быть тогда лучше объединить данные `continue_` и `litellm_` для построения графиков?\
 Возможно конечно нужны дополнительные пользовательские заголовки от Continue: https://docs.litellm.ai/docs/tutorials/openweb_ui#add-custom-headers-to-spend-tracking
