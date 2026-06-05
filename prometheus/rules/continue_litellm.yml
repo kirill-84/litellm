@@ -26,13 +26,13 @@ groups:
 
   - name: continue_autocomplete
     rules:
-      # Прокси доли отмен: «показано-но-не-принято». Это НЕ настоящая доля отмен
+      # Прокси доли отмен: 'показано-но-не-принято'. Это НЕ настоящая доля отмен
       # на лету (Esc до показа подсказки обычно не даёт события autocomplete).
       - record: continue_autocomplete_reject_rate_5m
         expr: sum(rate(continue_autocomplete_total{accepted="false"}[5m])) / clamp_min(sum(rate(continue_autocomplete_total[5m])), 1)
 
       # Доля попаданий в LRU-кэш Continue: такие подсказки отдаются без вызова LLM
-      # и завершаются мгновенно — отсюда «Complete» вместо отменяемого запроса.
+      # и завершаются мгновенно - отсюда 'Complete' вместо отменяемого запроса.
       - record: continue_autocomplete_cache_hit_rate_5m
         expr: sum(rate(continue_autocomplete_total{cache_hit="true"}[5m])) / clamp_min(sum(rate(continue_autocomplete_total[5m])), 1)
 
