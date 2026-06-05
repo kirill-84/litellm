@@ -47,7 +47,7 @@ Metrics browser: sum by (user, event_name) (rate(continue_events_total{user=~"$u
 ```
 sum by (end_user, model) (rate(litellm_output_tokens_metric_total[$__rate_interval]))
 ```
-`end_user` - значение приходит.
+`end_user` - значение приходит.\
 Это из-за добавления отслеживания действий в `@config.yaml`. Справка: https://docs.litellm.ai/docs/tutorials/openweb_ui#32-tracking-usage--spend
 
 ```
@@ -77,4 +77,3 @@ general_settings:
 
 Посмотри, может быть тогда лучше объединить данные `continue_` и `litellm_` для построения графиков?\
 Возможно конечно нужны дополнительные пользовательские заголовки от Continue: https://docs.litellm.ai/docs/tutorials/openweb_ui#add-custom-headers-to-spend-tracking
-Есть еще приходящие - `Metadata`
