@@ -61,6 +61,19 @@ groups:
       - record: continue_autocomplete_per_sec_by_user_accepted_5m
         expr: sum by (user, accepted) (rate(continue_autocomplete_total[5m]))
 
+      # То же по МОДЕЛИ (user часто пуст → этот разрез информативнее). На дашборде он
+      # сопоставляется с litellm_output_tokens_per_sec_by_end_user_model_5m: слева
+      # «какая модель чаще принимается», справа «кто её потребляет». accepted живёт
+      # ТОЛЬКО в Continue — объединить с litellm по пользователю нельзя (общий ключ
+      # лишь model, а он грубее пользователя).
+      - record: continue_autocomplete_per_sec_by_model_accepted_5m
+        expr: sum by (model, accepted) (rate(continue_autocomplete_total[5m]))
+
+      # Reject-rate по модели. Деление безопасно: accepted="false" ⊆ total, поэтому
+      # 0/0 даёт пустоту (а не +Inf); clamp_min не нужен.
+      - record: continue_autocomplete_reject_rate_by_model_5m
+        expr: sum by (model) (rate(continue_autocomplete_total{accepted="false"}[5m])) / sum by (model) (rate(continue_autocomplete_total[5m]))
+
   # --- Разрезы по пользователям и моделям (LiteLLM, server-side, НЕ cancel-inclusive) ---
   # Авторитетный мульти-пользовательский учёт: метка end_user = X-OpenWebUI-User-Email
   # (роль customer), user = X-OpenWebUI-User-Id (роль internal_user) — через

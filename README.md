@@ -89,6 +89,9 @@ docker compose up -d --build continue-exporter   # или просто up -d --b
 > # 3) Реально ли прилетает chatInteraction (иначе «chat»-половина панелей будет пустой)?
 > docker exec continue-exporter \
 >   sh -c 'grep -o "\"name\":\"[^\"]*\"" /data/events.jsonl | sort | uniq -c'
+> # 4) Есть ли у autocomplete реальная метка model? (пусто ⇒ панели 28/30 «accept/reject
+> #    по модели» схлопнутся в одну строку model="unknown")
+> curl -s localhost:4010/metrics | grep continue_autocomplete_total | grep -v 'model="unknown"'
 > ```
 > Риски **связаны**: если `userId` пуст **и** сработал #14667 — per-user данных нет
 > нигде; тогда чините хотя бы один путь.
@@ -115,6 +118,12 @@ sum(rate(litellm_output_tokens_metric_total[1m]))
 sum(rate(litellm_output_tokens_metric_total[5m]))
   / sum(rate(litellm_request_total_latency_metric_sum[5m]))
 
+# та же «скорость на запрос», но ПО МОДЕЛЯМ (видно, какая модель генерирует быстрее).
+# Деление litellm-метрики на litellm-метрику — метка model у обеих одинаковая, сопоставление
+# точное (нет рассогласования имён, как на мосту Continue↔litellm).
+sum by (model) (rate(litellm_output_tokens_metric_total[5m]))
+  / sum by (model) (rate(litellm_request_total_latency_metric_sum[5m]))
+
 # --- По пользователям и моделям (подробности и каветы — в разделе ниже) ---
 # «Кто чаще autocomplete или chat» (Continue, client-side): тип активности есть ТОЛЬКО тут,
 # через event_name. Метка user = Continue userId (часто пуста на локальном VS Code).
@@ -131,6 +140,14 @@ sum by (end_user, model) (rate(litellm_output_tokens_metric_total[5m]))
 # прокси-доля отклонений автодополнения (НЕ доля отмен на лету)
 continue_autocomplete_reject_rate_5m
 
+# accept/reject ПО МОДЕЛИ (user часто пуст → разрез по модели информативнее).
+# Кладётся рядом с per-user токенами litellm: слева «какая модель чаще принимается»,
+# справа «кто её потребляет». accepted есть ТОЛЬКО в Continue — связать с litellm по
+# пользователю нельзя (общий ключ лишь model, он грубее пользователя).
+sum by (model, accepted) (rate(continue_autocomplete_total[5m]))
+sum by (model) (rate(continue_autocomplete_total{accepted="false"}[5m]))
+  / sum by (model) (rate(continue_autocomplete_total[5m]))
+
 # отклонённые автодополнения в секунду, отрисованные «в минус» (индикатор отказов;
 # это ЗАПРОСЫ/сек, НЕ tokens/s — токенно-взвешенной отмены в dev-data нет)
 0 - sum(rate(continue_autocomplete_total{accepted="false"}[5m]))
@@ -140,6 +157,7 @@ continue_autocomplete_reject_rate_5m
 (`*_per_sec_5m`, `continue_autocomplete_reject_rate_5m`, `continue_autocomplete_cache_hit_rate_5m`,
 а также разрезы по пользователям/моделям: `continue_events_per_sec_by_user_event_5m`,
 `continue_generated_tokens_per_sec_by_user_5m`/`_by_model_5m`,
+`continue_autocomplete_per_sec_by_model_accepted_5m`, `continue_autocomplete_reject_rate_by_model_5m`,
 `litellm_output_tokens_per_sec_by_end_user_model_5m`/`_by_user_model_5m`).
 
 > **Про окна `rate()`.** Примеры выше — с фиксированными окнами (`[1m]`/`[5m]`), потому
@@ -197,7 +215,9 @@ Datasource Prometheus и дашборд **«LiteLLM + Continue — tokens/sec (c
   взвешенное среднее. ⚠️ Это **НЕ cancel-inclusive** (источник — LiteLLM, при жёсткой
   отмене недосчитывает) и **не равно** агрегатному `sum(rate(...))`, который делит на
   стену времени с простоями (тот же запрос там ≈ `457/300 ≈ 1.5`). Второй ряд — decode
-  speed без TTFT (валиден только для стриминга).
+  speed без TTFT (валиден только для стриминга). Ниже отдельной панелью — **та же скорость
+  ПО МОДЕЛЯМ** (`… by (model) …`): видно, какая модель генерирует быстрее; деление
+  litellm/litellm, метка `model` совпадает → сопоставление точное.
 - **По моделям и LiteLLM** — generated tokens/sec в разбивке по моделям; LiteLLM
   input vs output.
 - **Автодополнение и отмены (Esc)** — accepted vs rejected, reject-rate, cache-hit
@@ -216,6 +236,18 @@ Datasource Prometheus и дашборд **«LiteLLM + Continue — tokens/sec (c
   *таблица-лидерборд* событий по пользователю и типу за период. Вверху дашборда —
   переменные **`$user`** и **`$model`** (мультивыбор) для фильтрации рядов Continue;
   при пустом Continue `userId` пользователь будет один — `unknown`.
+- **Accept/reject по модели ↔ потребление по пользователям** — сопоставление через метку
+  `model`: слева *accepted vs rejected по модели* (Continue — единственный источник
+  принятия), справа *LiteLLM output tokens/sec по `end_user, model`* (кто реально
+  потребляет модель), снизу во всю ширину — *reject-rate по модели*. ⚠️ Это
+  **сопоставление по модели, а не join по пользователю**: per-user accept/reject
+  недостижим — принятие живёт только в Continue (где `userId` пуст), а identity по людям
+  приходит лишь из LiteLLM (`end_user`), и общего ключа тоньше модели между источниками
+  нет. Два рассогласования, которые надо держать в голове: (1) значения метки `model` у
+  Continue и LiteLLM могут различаться (сопоставляйте по смыслу); (2) **наборы моделей
+  разные** — слева только модели роли autocomplete (`continue_autocomplete_total` пишется
+  лишь для них), справа — все модели, включая chat; chat-модели справа левого аналога не
+  имеют.
 
 > Окна `rate()` на всех панелях — динамические (`$__rate_interval`, не фиксированные 5m).
 > Панели reject-rate / cache-hit раньше брались из recording-правил `*_5m`; теперь их

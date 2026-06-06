@@ -100,7 +100,7 @@
  "timezone": "",
  "title": "LiteLLM + Continue — tokens/sec (cancel-inclusive)",
  "uid": "tokens-per-sec",
- "version": 5,
+ "version": 7,
  "panels": [
   {
    "id": 1,
@@ -114,7 +114,7 @@
    },
    "options": {
     "mode": "markdown",
-    "content": "**tokens/sec включая отменённые.** `continue_generated_tokens_total` (Continue) считает токены даже для отменённых генераций - это и есть cancel-inclusive throughput. Серверные `litellm_*` при обрыве стрима недосчитывают, поэтому ряды показаны раздельно (НЕ суммируются - это один и тот же трафик через прокси). **Отдельной \"cancel tokens/sec\" нет**: dev-data Continue не помечает токены отменой. Раздел *Автодополнение* показывает прокси отмен (`accepted=false`) и долю попаданий в кэш (`cache_hit`). Окна `rate()` - **динамические** (`$__rate_interval`: авто-подбор под scrape-интервал и зум, а не фиксированные 5m). Панель **'Tokens/sec на запрос'** даёт Console-метрику `completion ÷ duration` по гистограмме LiteLLM (взвешенное среднее, НЕ cancel-inclusive). Ряд **'По пользователям и активности'** отвечает \"кто чаще чем пользуется autocomplete или chat\": разрез Continue `by (user, event_name)` (метка user=Continue userId - при локальном VS Code может быть пустой) плюс авторитетный per-user учёт LiteLLM `by (end_user, model)` через `user_header_mappings` (end_user=email из OpenWebUI; если пусто - см. litellm#14667). Переменные `$user`/`$model` фильтруют ряды Continue."
+    "content": "**tokens/sec включая отменённые.** `continue_generated_tokens_total` (Continue) считает токены даже для отменённых генераций - это и есть cancel-inclusive throughput. Серверные `litellm_*` при обрыве стрима недосчитывают, поэтому ряды показаны раздельно (НЕ суммируются - это один и тот же трафик через прокси). **Отдельной \"cancel tokens/sec\" нет**: dev-data Continue не помечает токены отменой. Раздел *Автодополнение* показывает прокси отмен (`accepted=false`) и долю попаданий в кэш (`cache_hit`). Окна `rate()` - **динамические** (`$__rate_interval`: авто-подбор под scrape-интервал и зум, а не фиксированные 5m). Панель **'Tokens/sec на запрос'** даёт Console-метрику `completion ÷ duration` по гистограмме LiteLLM (взвешенное среднее, НЕ cancel-inclusive). Ряд **'По пользователям и активности'** отвечает \"кто чаще чем пользуется autocomplete или chat\": разрез Continue `by (user, event_name)` (метка user=Continue userId - при локальном VS Code может быть пустой) плюс авторитетный per-user учёт LiteLLM `by (end_user, model)` через `user_header_mappings` (end_user=email из OpenWebUI; если пусто - см. litellm#14667). Переменные `$user`/`$model` фильтруют ряды Continue. Ряд **'Accept/reject по модели ↔ потребление по пользователям'** кладёт рядом качество модели (accepted/rejected по модели, Continue - единственный источник принятия) и её потребление по людям (LiteLLM `by (end_user, model)`); мост - метка model (значения у Continue/LiteLLM могут различаться, сопоставляйте по смыслу). Per-user accept/reject недостижим: принятие живёт только в Continue, где userId часто пуст; identity per-user приходит лишь со стороны LiteLLM (end_user), а её нельзя связать с accept/reject (нет общего ключа тоньше модели)."
    }
   },
   {
@@ -435,6 +435,60 @@
    ]
   },
   {
+   "id": 31,
+   "type": "timeseries",
+   "title": "Tokens/sec на запрос ПО МОДЕЛЯМ — completion ÷ duration (LiteLLM; НЕ cancel-inclusive)",
+   "description": "Разрез панели выше по моделям: для каждой модели взвешенное среднее (output tokens)/(request latency) в окне — та же «скорость генерации», что в Continue Console, но раздельно по моделям. Деление litellm-метрики на litellm-метрику: метка model у обеих одинаковая, поэтому сопоставление точное (нет рассогласования имён, как на мосту Continue↔litellm). КАВЕТЫ те же, что у суммарной панели: источник LiteLLM → при ЖЁСТКОЙ отмене стрима число недосчитывается (ряд НЕ cancel-inclusive); требует, чтобы litellm_request_total_latency_metric_sum реально отдавался на litellm:4000/metrics.",
+   "gridPos": {
+    "h": 8,
+    "w": 24,
+    "x": 0,
+    "y": 27
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "tok/s",
+     "custom": {
+      "drawStyle": "line",
+      "fillOpacity": 10,
+      "lineWidth": 2,
+      "showPoints": "never"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "calcs": [
+      "mean",
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum by (model) (rate(litellm_output_tokens_metric_total[$__rate_interval])) / sum by (model) (rate(litellm_request_total_latency_metric_sum[$__rate_interval]))",
+     "legendFormat": "{{model}}"
+    }
+   ]
+  },
+  {
    "id": 8,
    "type": "row",
    "title": "По моделям и LiteLLM",
@@ -443,7 +497,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 27
+    "y": 35
    },
    "panels": []
   },
@@ -455,7 +509,7 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 28
+    "y": 36
    },
    "datasource": {
     "type": "prometheus",
@@ -506,7 +560,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 28
+    "y": 36
    },
    "datasource": {
     "type": "prometheus",
@@ -565,7 +619,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 36
+    "y": 44
    },
    "panels": []
   },
@@ -577,7 +631,7 @@
     "h": 8,
     "w": 10,
     "x": 0,
-    "y": 37
+    "y": 45
    },
    "datasource": {
     "type": "prometheus",
@@ -635,7 +689,7 @@
     "h": 8,
     "w": 4,
     "x": 10,
-    "y": 37
+    "y": 45
    },
    "datasource": {
     "type": "prometheus",
@@ -698,7 +752,7 @@
     "h": 8,
     "w": 4,
     "x": 14,
-    "y": 37
+    "y": 45
    },
    "datasource": {
     "type": "prometheus",
@@ -753,7 +807,7 @@
     "h": 8,
     "w": 6,
     "x": 18,
-    "y": 37
+    "y": 45
    },
    "datasource": {
     "type": "prometheus",
@@ -812,7 +866,7 @@
     "h": 8,
     "w": 24,
     "x": 0,
-    "y": 45
+    "y": 53
    },
    "datasource": {
     "type": "prometheus",
@@ -879,7 +933,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 53
+    "y": 61
    },
    "panels": []
   },
@@ -891,7 +945,7 @@
     "h": 7,
     "w": 12,
     "x": 0,
-    "y": 54
+    "y": 62
    },
    "datasource": {
     "type": "prometheus",
@@ -943,7 +997,7 @@
     "h": 7,
     "w": 6,
     "x": 12,
-    "y": 54
+    "y": 62
    },
    "datasource": {
     "type": "prometheus",
@@ -1004,7 +1058,7 @@
     "h": 7,
     "w": 6,
     "x": 18,
-    "y": 54
+    "y": 62
    },
    "datasource": {
     "type": "prometheus",
@@ -1062,7 +1116,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 61
+    "y": 69
    },
    "panels": []
   },
@@ -1075,7 +1129,7 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 62
+    "y": 70
    },
    "datasource": {
     "type": "prometheus",
@@ -1128,7 +1182,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 62
+    "y": 70
    },
    "datasource": {
     "type": "prometheus",
@@ -1181,7 +1235,7 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 70
+    "y": 78
    },
    "datasource": {
     "type": "prometheus",
@@ -1234,7 +1288,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 70
+    "y": 78
    },
    "datasource": {
     "type": "prometheus",
@@ -1282,6 +1336,180 @@
        "Value": "Событий за период"
       }
      }
+    }
+   ]
+  },
+  {
+   "id": 27,
+   "type": "row",
+   "title": "Accept/reject по модели ↔ потребление по пользователям (мост — model)",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 86
+   },
+   "panels": []
+  },
+  {
+   "id": 28,
+   "type": "timeseries",
+   "title": "Autocomplete accepted vs rejected по модели (Continue)",
+   "description": "События автодополнения в секунду в разрезе модель × accepted (Continue, client-side). Отвечает «какая модель чаще принимается/отклоняется». accepted=unknown - поле accepted в событии отсутствовало. Источник принятия - ТОЛЬКО Continue: litellm признак accepted не видит, поэтому объединить эти данные с litellm по пользователю нельзя (нет общего ключа тоньше модели). Разрез НЕ по пользователю (Continue userId часто пуст), а по модели. Метка model здесь - модель Continue; её значение может НЕ совпадать с model у litellm на соседней панели - сопоставляйте по смыслу.",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 87
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ops",
+     "custom": {
+      "drawStyle": "line",
+      "fillOpacity": 10,
+      "lineWidth": 2,
+      "showPoints": "never"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "calcs": [
+      "lastNotNull",
+      "sum"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum by (model, accepted) (rate(continue_autocomplete_total[$__rate_interval]))",
+     "legendFormat": "{{model}} · acc={{accepted}}"
+    }
+   ]
+  },
+  {
+   "id": 29,
+   "type": "timeseries",
+   "title": "LiteLLM output tokens/sec по пользователям и моделям (для сопоставления)",
+   "description": "Та же серия, что в разделе «По пользователям и активности» (LiteLLM output by end_user, model) - продублирована здесь рядом с accept/reject для прямого сопоставления «качество модели (слева) ↔ кто её потребляет (здесь)». end_user = X-OpenWebUI-User-Email (user_header_mappings). НЕ cancel-inclusive. ВАЖНО про мост по model: (1) значения метки model у Continue и litellm могут различаться - сопоставляйте по смыслу; (2) НАБОРЫ моделей разные - здесь ВСЕ модели (вкл. chat), а слева (panel 28) только модели роли autocomplete, поэтому chat-модели справа левого аналога не имеют. Если ряды пустые - см. #14667 / enterprise-лицензию (описание панели 25).",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 87
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "tok/s",
+     "custom": {
+      "drawStyle": "line",
+      "fillOpacity": 10,
+      "lineWidth": 2,
+      "showPoints": "never"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "calcs": [
+      "lastNotNull",
+      "sum"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum by (end_user, model) (rate(litellm_output_tokens_metric_total[$__rate_interval]))",
+     "legendFormat": "{{end_user}} · {{model}}"
+    }
+   ]
+  },
+  {
+   "id": 30,
+   "type": "timeseries",
+   "title": "Reject-rate по модели (прокси отмен, динамич. окно)",
+   "description": "Доля отклонённых автодополнений по каждой модели: rejected / total. Это «показано-но-не-принято», НЕ настоящая доля отмен на лету (жёсткий Esc до показа подсказки события autocomplete обычно не даёт). Деление безопасно: серия accepted=\"false\" - подмножество total, поэтому при отсутствии трафика получается 0/0 (пусто), а не +Inf. Источник - ТОЛЬКО Continue.",
+   "gridPos": {
+    "h": 6,
+    "w": 24,
+    "x": 0,
+    "y": 95
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "min": 0,
+     "max": 1,
+     "custom": {
+      "drawStyle": "line",
+      "fillOpacity": 10,
+      "lineWidth": 2,
+      "showPoints": "never"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum by (model) (rate(continue_autocomplete_total{accepted=\"false\"}[$__rate_interval])) / sum by (model) (rate(continue_autocomplete_total[$__rate_interval]))",
+     "legendFormat": "{{model}}"
     }
    ]
   }
