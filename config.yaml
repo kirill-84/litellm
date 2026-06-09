@@ -1,24 +1,57 @@
 model_list:
+  # --- Автодополнение (FIM): Qwen2.5-Coder 3B, быстрый и детерминированный ---
   - model_name: qwen2.5-coder-3b-instruct-q8_0:latest
     litellm_params:
       model: ollama/qwen2.5-coder-3b-instruct-q8_0:latest
       # Действующий адрес/IP машины с Ollama, напр. http://10.0.10.10:11434
       api_base: http://10.0.10.10:11434
+      # ВАЖНО: Continue шлёт свои temperature/top_p/max_tokens в КАЖДОМ запросе и
+      # перекрывает значения отсюда. Реально работают лишь ключи, которых Continue не
+      # шлёт: num_ctx, num_predict, repeat_penalty, stop, таймауты. temperature/top_p
+      # ниже — дефолты-фолбэк для не-Continue клиентов (напр. прямой чат в OpenWebUI).
       temperature: 0.2
       top_p: 0.9
-      max_tokens: 768
+      # Окно контекста: дефолт Ollama = 2048 и МОЛЧА режет длинный промпт кода.
+      # Под maxPromptTokens≈1024 + суффикс Continue 8192 хватает с запасом.
+      num_ctx: 8192
+      # Автодополнения короткие: 512 быстрее 768 без потери качества (было 768).
+      num_predict: 512
+      # Для кода высокий repeat_penalty вреден — скобки/отступы законно повторяются
+      # (было 1.15).
+      repeat_penalty: 1.1
       stop:
         - "<|im_end|>"
         - "<|endoftext|>"
-      num_predict: 768
-      repeat_penalty: 1.15
+      # Подсказка обязана быть мгновенной: короткий таймаут, ретраи бессмысленны
+      # (устаревшее автодополнение не нужно). Убран дубль max_tokens (LiteLLM мапит
+      # его в num_predict для ollama → конфликт с явным num_predict выше).
+      timeout: 30
+      stream_timeout: 20
+      max_retries: 0
+  # --- Чат / edit / apply: GLM-4.5-Air, крупная MoE-модель ---
   - model_name: 21_GLM-4.5-Air-Q6_K
     litellm_params:
       model: ollama/GLM-4.5-Air-Q6_K:latest
       api_base: http://10.0.10.11:11434
       temperature: 0.2
-      top_p: 0.9
-      use_litellm_proxy: true
+      # GLM-4.5 рекомендует top_p 0.95 (фолбэк-дефолт; Continue шлёт свой).
+      top_p: 0.95
+      # Большое окно под историю чата + файлы; num_ctx заметно ест VRAM — 16384 это
+      # компромисс, поднимайте если позволяет видеопамять. num_predict под объёмные
+      # ответы/правки.
+      num_ctx: 16384
+      num_predict: 4096
+      stop:
+        - "<|user|>"
+        - "<|endoftext|>"
+      # Крупная модель отвечает дольше: общий таймаут синхронизирован с
+      # litellm_settings.request_timeout (540), stream_timeout даёт запас на холодную
+      # загрузку модели до первого токена. Пара ретраев на сетевые сбои.
+      timeout: 540
+      stream_timeout: 120
+      max_retries: 2
+      # use_litellm_proxy УДАЛЁН: флаг роутит запрос через НИЖЕСТОЯЩИЙ LiteLLM-proxy,
+      # для прямой ollama-модели он лишний и ломает маршрут.
 
 # ВАЖНО: litellm_settings — ключ ВЕРХНЕГО уровня (НЕ внутри элемента model_list),
 # иначе callback prometheus не загрузится и метрик litellm_* на /metrics не будет.

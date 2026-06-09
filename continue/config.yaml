@@ -21,16 +21,27 @@ models:
       debounceDelay: 350
       maxPromptTokens: 1024
       onlyMyCode: true
+      # Кэш Continue: повтор того же контекста отдаётся без вызова LLM (мгновенно).
+      useCache: true
     defaultCompletionOptions:
-      temperature: 0.3
+      # Эти значения Continue шлёт в запросе и они ПЕРЕКРЫВАЮТ дефолты LiteLLM —
+      # т.е. именно они и работают. Автодополнение почти детерминированное (0.3 → 0.1).
+      temperature: 0.1
+      topP: 0.9
+      # Cap генерации (синхронно с num_predict в config.yaml); со stop "\n" обычно
+      # не достигается, но защищает от «убегания» на однострочной подсказке.
+      maxTokens: 512
       stop:
         - "\n"
     requestOptions:
       extraBodyProperties:
         think: false
-  - name: LLama3
+  # Имя модели должно совпадать с тем, что отдаёт OpenWebUI (= alias LiteLLM
+  # 21_GLM-4.5-Air-Q6_K), иначе chat-трафик не пойдёт через LiteLLM и не попадёт в
+  # учёт токенов. Раньше тут стояла Meta-Llama-3-8B, которой нет в config.yaml.
+  - name: GLM-4.5-Air
     <<: *model_defaults
-    model: Meta-Llama-3-8B-Instruct-Q4_K_M.gguf
+    model: 21_GLM-4.5-Air-Q6_K
     env:
       useLegacyCompletionsEndpoint: false
     roles:
@@ -39,9 +50,20 @@ models:
       - apply
     defaultCompletionOptions:
       temperature: 0.2
+      # GLM-4.5 рекомендует top_p 0.95.
+      topP: 0.95
       maxTokens: 4096
+      # Сколько контекста Continue собирает клиентски (≤ num_ctx в config.yaml=16384,
+      # иначе Ollama молча обрежет промпт).
+      contextLength: 16384
     requestOptions:
-      timeout: 150000
+      # Крупная модель отвечает дольше: 150с → 540с (синхронно с серверным
+      # request_timeout), иначе длинный ответ оборвётся.
+      timeout: 540000
+      extraBodyProperties:
+        # thinking ВЫКЛючен ради отзывчивости IDE (chat/edit/apply); смените на true,
+        # если нужны глубокие рассуждения GLM-4.5 ценой задержки.
+        think: false
 
 rules:
   - Give concise responses
